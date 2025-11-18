@@ -198,7 +198,7 @@ if df is not None:
             sorted_delta_cols = [c for _, c in sorted(zip(selected_dates, delta_cols), key=lambda pair: date_total_columns.index(pair[0]) if pair[0] in date_total_columns else -1, reverse=True)]
             cols_to_show = ['IGN'] + [c for c in sorted_delta_cols if c in filtered_df.columns]
             chart_data = filtered_df.set_index('IGN')[cols_to_show[1:]] if len(cols_to_show) > 1 else None
-        st.write(f"## Contribution on {', '.join([d.replace('_total','').replace('_delta','') for d in selected_dates])}")
+        st.write(f"## Score on {', '.join([d.replace('_total','').replace('_delta','') for d in selected_dates])}")
         if chart_data is not None and not chart_data.empty:
             st.line_chart(chart_data, use_container_width=True)
         # Sort by first date in cols_to_show descending for Sewers (exclude nulls)
@@ -211,7 +211,7 @@ if df is not None:
         st.dataframe(display_df, use_container_width=True, height=600)
     else:
         # Show all dates (line chart)
-        st.write(f"## {'Total' if view_mode == 'Total' else 'Daily'} Trends Over Time")
+        st.write(f"## {'Total' if view_mode == 'Total' else 'Weekly'} Trends Over Time")
         chart_data = filtered_df.set_index('IGN')[chart_cols].T
         st.line_chart(chart_data, use_container_width=True)
         # Sort by latest date descending for Sewers (exclude nulls)
