@@ -150,22 +150,22 @@ if df is not None:
         date_desc = ', '.join([c.replace('_total','').replace('_delta','') for c in selected_dates])
     st.write(f"### Showing data for: {date_desc}")
 
-    # Show metrics above chart/table (skip Contribution Metrics for Sewers)
-    if selected_dataset_label != 'Sewers':
-        if view_mode == 'Total':
-            metric_cols = date_total_columns
-        else:
-            metric_cols = delta_columns
+    # # Show metrics above chart/table (skip Contribution Metrics for Sewers)
+    # if selected_dataset_label != 'Sewers':
+    #     if view_mode == 'Total':
+    #         metric_cols = date_total_columns
+    #     else:
+    #         metric_cols = delta_columns
 
-        # For delta view, always show only the selected date's values
-        if view_mode == 'Delta' and selected_dates:
-            show_contribution_metrics(filtered_df, metric_cols, selected_dates)
-        # If showing all dates, use only the latest date for metrics
-        elif not selected_dates or set(selected_dates) == set(metric_cols):
-            latest_col = metric_cols[-1]  # Last column is the latest
-            show_contribution_metrics(filtered_df, [latest_col], [latest_col])
-        elif selected_dates:
-            show_contribution_metrics(filtered_df, metric_cols, selected_dates)
+    #     # For delta view, always show only the selected date's values
+    #     if view_mode == 'Delta' and selected_dates:
+    #         show_contribution_metrics(filtered_df, metric_cols, selected_dates)
+    #     # If showing all dates, use only the latest date for metrics
+    #     elif not selected_dates or set(selected_dates) == set(metric_cols):
+    #         latest_col = metric_cols[-1]  # Last column is the latest
+    #         show_contribution_metrics(filtered_df, [latest_col], [latest_col])
+    #     elif selected_dates:
+    #         show_contribution_metrics(filtered_df, metric_cols, selected_dates)
 
     # If Sewers dataset and a single name is selected, show highest across all time
     if selected_names and len(selected_names) == 1:
