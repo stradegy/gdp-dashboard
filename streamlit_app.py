@@ -211,7 +211,7 @@ if df is not None:
         st.dataframe(display_df, use_container_width=True, height=600)
     else:
         # Show all dates (line chart)
-        st.write(f"## {'Total' if view_mode == 'Total' else 'Weekly'} Trends Over Time")
+        st.write(f"## {'Total' if view_mode == 'Total' else 'Weekly'} GAINS Over Time")
         chart_data = filtered_df.set_index('IGN')[chart_cols].T
         st.line_chart(chart_data, use_container_width=True)
         # Sort by latest date descending for Sewers (exclude nulls)
