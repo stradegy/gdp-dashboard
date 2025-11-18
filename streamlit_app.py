@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import math
+import toml
 from pathlib import Path
 
 # Set the title and favicon that appear in the Browser's tab bar.
@@ -11,36 +12,17 @@ st.set_page_config(
 )
 
 @st.cache_data
-def load_data(path):
+def load_data():
     try:
-        p = Path(path)
-        # Choose reader based on file extension
-        if p.suffix.lower() == '.csv':
-            df = pd.read_csv(path)
-        elif p.suffix.lower() in ('.xls', '.xlsx'):
-            df = pd.read_excel(path, engine='openpyxl')
-        else:
-            # Fallback: try csv then excel
-            try:
-                df = pd.read_csv(path)
-            except Exception:
-                df = pd.read_excel(path, engine='openpyxl')
+        df = pd.DataFrame.from_dict(st.secrets, orient='index')
+        df = df.reset_index()
+        df = df.rename(columns={'index': 'IGN'})
         return df
-    except FileNotFoundError:
-        st.error(f"Error: The file '{path}' was not found. Please ensure it's in the same directory.")
-        return None
     except Exception as e:
         st.error(f"An error occurred while reading the file '{path}': {e}")
         return None
 
-datasets = {
-    'Sewers': 'sewers.csv',
-    'Contributions': 'contri.csv',
-}
-st.sidebar.header('Dataset')
-selected_dataset_label = st.sidebar.selectbox('Select dataset', list(datasets.keys()), index=0, key='selected_dataset')
-file_path = datasets[selected_dataset_label]
-df = load_data(file_path)
+df = load_data()
 
 if df is not None:
     # Clean the data - remove commas from numeric columns
@@ -55,7 +37,7 @@ if df is not None:
     rename_map = dict(zip(date_columns, new_date_columns))
     df = df.rename(columns=rename_map)
 
-    # Add daily delta columns
+    # Add delta columns
     for i in range(1, len(new_date_columns)):
         prev_col = new_date_columns[i-1]
         curr_col = new_date_columns[i]
@@ -186,7 +168,7 @@ if df is not None:
             show_contribution_metrics(filtered_df, metric_cols, selected_dates)
 
     # If Sewers dataset and a single name is selected, show highest across all time
-    if selected_dataset_label == 'Sewers' and selected_names and len(selected_names) == 1:
+    if selected_names and len(selected_names) == 1:
         selected_name = selected_names[0]
         try:
             # filtered_df should be already filtered to the selected name
@@ -218,10 +200,10 @@ if df is not None:
             chart_data = filtered_df.set_index('IGN')[cols_to_show[1:]] if len(cols_to_show) > 1 else None
         st.write(f"## Contribution on {', '.join([d.replace('_total','').replace('_delta','') for d in selected_dates])}")
         if chart_data is not None and not chart_data.empty:
-            st.bar_chart(chart_data, use_container_width=True)
+            st.line_chart(chart_data, use_container_width=True)
         # Sort by first date in cols_to_show descending for Sewers (exclude nulls)
         display_df = filtered_df[cols_to_show].copy()
-        if selected_dataset_label == 'Sewers' and len(cols_to_show) > 1:
+        if len(cols_to_show) > 1:
             sort_col = cols_to_show[1]  # First date column after IGN
             if sort_col in display_df.columns:
                 display_df = display_df[display_df[sort_col].notna()]
@@ -234,8 +216,7 @@ if df is not None:
         st.line_chart(chart_data, use_container_width=True)
         # Sort by latest date descending for Sewers (exclude nulls)
         display_df = filtered_df[['IGN'] + chart_cols].copy()
-        if selected_dataset_label == 'Sewers':
-            latest_col = chart_cols[-1]
-            display_df = display_df[display_df[latest_col].notna()]
-            display_df = display_df.sort_values(by=latest_col, ascending=False)
+        latest_col = chart_cols[-1]
+        display_df = display_df[display_df[latest_col].notna()]
+        display_df = display_df.sort_values(by=latest_col, ascending=False)
         st.dataframe(display_df, use_container_width=True, height=600)
