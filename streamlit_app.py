@@ -1,5 +1,10 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
+import math
+import toml
+from pathlib import Path
+from streamlit_js_eval import streamlit_js_eval
 
 # Set the title and favicon that appear in the Browser's tab bar.
 st.set_page_config(
@@ -117,26 +122,25 @@ if df is not None:
     display_df = filtered_df[['IGN'] + ['Personal Best'] + ['Date of Personal Best'] + view_columns]
     display_df = display_df.rename(columns=lambda col: col.replace('_total', '').replace('_delta', ''))
     
-    # NUMBERS DONT TALLY, THERE MAY BE DQ issue
-    # if st.session_state.selected_names == st.session_state.names and st.session_state.selected_dates == st.session_state.dates and st.session_state.view_mode == 'Total':
-    #     col1, col2, col3 = st.columns(3)
-    #     with col1:
-    #         delta = st.session_state.weekly_totals[st.session_state.latest_date] - st.session_state.weekly_totals[st.session_state.prev_date]
-    #         st.metric(label="This week's total score", value=st.session_state.weekly_totals[st.session_state.latest_date], delta=delta)
+    if st.session_state.selected_names == st.session_state.names and st.session_state.selected_dates == st.session_state.dates and st.session_state.view_mode == 'Total':
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            delta = st.session_state.weekly_totals[st.session_state.latest_date] - st.session_state.weekly_totals[st.session_state.prev_date]
+            st.metric(label="This week's total score", value=st.session_state.weekly_totals[st.session_state.latest_date], delta=delta)
         
-    #     with col2:
-    #         pax = (df[f'{st.session_state.latest_date}_total'] != 0).sum() 
-    #         # participation_rate = pax / len((df[st.session_state.latest_date != 0]))
-    #         st.metric(label="Pax Attempted", value = pax)
+        with col2:
+            pax = (df[f'{st.session_state.latest_date}_total'] != 0).sum() 
+            # participation_rate = pax / len((df[st.session_state.latest_date != 0]))
+            st.metric(label="Pax Attempted", value = pax)
         
-    #     with col3:
-    #         st.metric(label="Theoritical highest total score", value = st.session_state.theoritical_high)     
+        with col3:
+            st.metric(label="Theoritical highest total score", value = st.session_state.theoritical_high)     
         
-    # if len(st.session_state.selected_names) == 1:
-    #     player_data = display_df[display_df['IGN'] == st.session_state.selected_names]
-    #     personal_best = player_data['Personal Best'].iloc[0]
-    #     date_pb = player_data['Date of Personal Best'].iloc[0]       
-    #     st.metric('Personal Best:', f"{int(personal_best):,}", delta=f"on {date_pb}")
+    if len(st.session_state.selected_names) == 1:
+        player_data = display_df[display_df['IGN'] == st.session_state.selected_names]
+        personal_best = player_data['Personal Best'].iloc[0]
+        date_pb = player_data['Date of Personal Best'].iloc[0]       
+        st.metric('Personal Best:', f"{int(personal_best):,}", delta=f"on {date_pb}")
         
     
     chart_data = display_df.set_index('IGN')[st.session_state.selected_dates].T
