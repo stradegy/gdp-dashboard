@@ -1,8 +1,5 @@
 import streamlit as st
 import pandas as pd
-import math
-import toml
-from pathlib import Path
 
 # Set the title and favicon that appear in the Browser's tab bar.
 st.set_page_config(
@@ -19,10 +16,11 @@ def load_data():
         df = df.rename(columns={'index': 'IGN'})
         return df
     except Exception as e:
-        st.error(f"An error occurred while reading the file '{path}': {e}")
+        st.error(f"An error occurred while reading in secrets.toml: {e}")
         return None
 
 df = load_data()
+st.session_state.names = sorted(df['IGN'].dropna().unique().tolist())
 
 if df is not None:
     # Clean the data - remove commas from numeric columns
@@ -33,16 +31,43 @@ if df is not None:
 
     # Rename date columns to add '_total'
     date_columns = [col for col in df.columns if col != 'IGN']
+    st.session_state.dates = sorted(list(date_columns))
+    st.session_state.latest_date = st.session_state.dates[-1]
+    st.session_state.prev_date = st.session_state.dates[-2]
+    st.session_state.names = sorted(df['IGN'].dropna().unique().tolist())
     new_date_columns = [f"{col}_total" for col in date_columns]
     rename_map = dict(zip(date_columns, new_date_columns))
     df = df.rename(columns=rename_map)
-
+    
     # Add delta columns
     for i in range(1, len(new_date_columns)):
         prev_col = new_date_columns[i-1]
         curr_col = new_date_columns[i]
         delta_col = curr_col.replace('_total', '_delta')
         df[delta_col] = df[curr_col] - df[prev_col]
+        
+    df[f"{date_columns[0]}_delta"] = 0
+    total_cols = [col for col in df.columns if '_total' in col and pd.api.types.is_numeric_dtype(df[col])]
+    df['Personal Best'] = df[total_cols].max(axis=1)
+    st.session_state.theoritical_high = int(df['Personal Best'].sum())
+    
+    date_of_personal_best = []
+    for index, row in df.iterrows():
+        personal_best = row['Personal Best']
+        found_date = None
+        # Iterate through the total columns to find the date corresponding to the personal best
+        for col in total_cols:
+            if pd.notna(row[col]) and row[col] == personal_best:
+                found_date = col.replace('_total', '')
+                break
+        date_of_personal_best.append(found_date)
+    
+    df['Date of Personal Best'] = date_of_personal_best
+    
+    st.session_state.weekly_totals = {}
+    for col in new_date_columns:
+        date = col.replace('_total', '')
+        st.session_state.weekly_totals[date] = df[col].sum()
 
     # Update column lists for filtering and charting
     all_columns = df.columns.tolist()
@@ -52,171 +77,75 @@ if df is not None:
     # Sidebar filters
     st.sidebar.header('Filters')
     # Add filter state to session_state for reset functionality
-    if 'selected_name' not in st.session_state:
-        st.session_state.selected_name = 'All'
-    if 'selected_date_label' not in st.session_state:
-        # On first load, default to latest date (not 'All')
-        date_label_map = {col: col.replace('_total', '') for col in date_total_columns}
-        date_options = ['All'] + [date_label_map[col] for col in date_total_columns]
-        if date_total_columns:
-            st.session_state.selected_date_label = date_label_map[date_total_columns[-1]]
-        else:
-            st.session_state.selected_date_label = 'All'
+    if 'selected_names' not in st.session_state:
+        st.session_state.selected_names = st.session_state.names
+    if 'selected_dates' not in st.session_state:
+        st.session_state.selected_dates = st.session_state.dates
     if 'view_mode' not in st.session_state:
         st.session_state.view_mode = 'Total'
-
-    def reset_filters():
-        st.session_state.selected_name = 'All'
-        st.session_state.selected_date_label = 'All'
-        st.session_state.view_mode = 'Total'
-
-    st.sidebar.button('Remove All Filters', on_click=reset_filters)
-
-    name_options = sorted(df['IGN'].dropna().unique().tolist())
-    selected_names = st.sidebar.multiselect('Select Name(s)', name_options, default=name_options, key='selected_name')
+    
+   
+    # Create a button to reset the multiselect
+    if st.sidebar.button("Reset Selections"):
+        del st.session_state.selected_names
+        del st.session_state.selected_dates
+        del st.session_state.view_mode
+        st.rerun() # Rerun the app to reflect the change
+        
+    st.session_state.selected_names = st.sidebar.multiselect('Select Name(s)', st.session_state.names, default=st.session_state.names, key='selected_name')
     # Ensure selected_names is always a list for filtering
-    if not isinstance(selected_names, list):
-        selected_names = [selected_names] if selected_names else []
-    # If 'All' is selected or nothing is selected, use all names
-    if not selected_names or selected_names == ['All'] or set(selected_names) == set(name_options):
-        selected_names = name_options
-    # Clean date options for multiselect (remove _total)
-    date_label_map = {col: col.replace('_total', '') for col in date_total_columns}
-    date_options = [date_label_map[col] for col in date_total_columns]
-    selected_date_labels = st.sidebar.multiselect('Select Date(s)', date_options, default=[date_options[-1]], key='selected_date_label')
-    # Map back to the actual column names
-    if not selected_date_labels or set(selected_date_labels) == set(date_options):
-        selected_dates = date_total_columns
-    else:
-        selected_dates = [col for col, label in date_label_map.items() if label in selected_date_labels]
+    if not isinstance(st.session_state.selected_names, list):
+        st.session_state.selected_names = [st.session_state.selected_names] if st.session_state.selected_names else []
+
+    st.session_state.selected_dates = st.sidebar.multiselect('Select Dates(s)', st.session_state.dates, default=st.session_state.dates, key='selected_date')
+    # Ensure selected_dates is always a list for filtering
+    if not isinstance(st.session_state.selected_dates, list):
+        st.session_state.selected_dates = [st.session_state.selected_dates] if st.session_state.selected_dates else []
+
     view_mode = st.sidebar.radio('Show', options=['Total', 'Delta'], index=0, key='view_mode')
 
-    # Filter by name
-    filtered_df = df.copy()
-    if selected_names:
-        filtered_df = filtered_df[filtered_df['IGN'].isin(selected_names)]
-
-    # Choose columns for chart and table based on toggle
+    filtered_df = df[df['IGN'].isin(st.session_state.selected_names)]
+    
+    date_total_columns = [f"{date}_total" for date in sorted(st.session_state.selected_dates)]
+    date_delta_columns = [f"{date}_delta" for date in sorted(st.session_state.selected_dates)]
+    
+    # Include 'IGN' and the selected date_total_columns
+    view_columns =  date_total_columns if view_mode == 'Total' else date_delta_columns
+    
+    # columns_to_select  = ['IGN'] + ['Personal Best'] + view_columns
+    
+    display_df = filtered_df[['IGN'] + ['Personal Best'] + ['Date of Personal Best'] + view_columns]
+    display_df = display_df.rename(columns=lambda col: col.replace('_total', '').replace('_delta', ''))
+    
+    # NUMBERS DONT TALLY, THERE MAY BE DQ issue
+    # if st.session_state.selected_names == st.session_state.names and st.session_state.selected_dates == st.session_state.dates and st.session_state.view_mode == 'Total':
+    #     col1, col2, col3 = st.columns(3)
+    #     with col1:
+    #         delta = st.session_state.weekly_totals[st.session_state.latest_date] - st.session_state.weekly_totals[st.session_state.prev_date]
+    #         st.metric(label="This week's total score", value=st.session_state.weekly_totals[st.session_state.latest_date], delta=delta)
+        
+    #     with col2:
+    #         pax = (df[f'{st.session_state.latest_date}_total'] != 0).sum() 
+    #         # participation_rate = pax / len((df[st.session_state.latest_date != 0]))
+    #         st.metric(label="Pax Attempted", value = pax)
+        
+    #     with col3:
+    #         st.metric(label="Theoritical highest total score", value = st.session_state.theoritical_high)     
+        
+    # if len(st.session_state.selected_names) == 1:
+    #     player_data = display_df[display_df['IGN'] == st.session_state.selected_names]
+    #     personal_best = player_data['Personal Best'].iloc[0]
+    #     date_pb = player_data['Date of Personal Best'].iloc[0]       
+    #     st.metric('Personal Best:', f"{int(personal_best):,}", delta=f"on {date_pb}")
+        
+    
+    chart_data = display_df.set_index('IGN')[st.session_state.selected_dates].T
     if view_mode == 'Total':
-        chart_cols = date_total_columns
+        st.title('Sewer scores over the weeks')
     else:
-        chart_cols = delta_columns
-    # If delta view requested but no delta columns exist (e.g., Sewers), fall back
-    delta_available = True
-    if view_mode == 'Delta' and not chart_cols:
-        delta_available = False
-        st.warning('Delta view is not available for this dataset. Showing totals instead.')
-        chart_cols = date_total_columns
-
-    # Filter by date (for chart and table)
-    # --- Contribution Metrics ---
-    def show_contribution_metrics(df, date_cols, selected_dates):
-        import numpy as np
-        if not selected_dates or set(selected_dates) == set(date_cols):
-            cols = date_cols
-            label = 'All Dates (avg)'
-        else:
-            cols = selected_dates
-            label = ', '.join([c.replace('_total','').replace('_delta','') for c in cols])
-        total_people = len(df)
-        if total_people == 0:
-            st.info('No data to calculate metrics.')
-            return
-        pct_10k = []
-        pct_gt0 = []
-        count_10k = []
-        count_gt0 = []
-        for col in cols:
-            s = df[col]
-            n_10k = (s >= 10000).sum()
-            n_gt0 = (s > 0).sum()
-            pct_10k.append(n_10k / total_people * 100)
-            pct_gt0.append(n_gt0 / total_people * 100)
-            count_10k.append(n_10k)
-            count_gt0.append(n_gt0)
-        # If multiple dates, show average
-        st.write('### Contribution Metrics')
-        if len(cols) > 1:
-            st.metric('Contributed 10k', f"{np.mean(pct_10k):.1f}% ({int(np.mean(count_10k))}/{total_people})")
-            st.metric('Contributed >0', f"{np.mean(pct_gt0):.1f}% ({int(np.mean(count_gt0))}/{total_people})")
-        else:
-            st.metric('Contributed 10k', f"{pct_10k[0]:.1f}% ({count_10k[0]}/{total_people})")
-            st.metric('Contributed >0', f"{pct_gt0[0]:.1f}% ({count_gt0[0]}/{total_people})")
-
-    # Show date description above metrics
-    if not selected_dates or set(selected_dates) == set(date_total_columns):
-        date_desc = 'All Dates'
-    else:
-        date_desc = ', '.join([c.replace('_total','').replace('_delta','') for c in selected_dates])
-    st.write(f"### Showing data for: {date_desc}")
-
-    # # Show metrics above chart/table (skip Contribution Metrics for Sewers)
-    # if selected_dataset_label != 'Sewers':
-    #     if view_mode == 'Total':
-    #         metric_cols = date_total_columns
-    #     else:
-    #         metric_cols = delta_columns
-
-    #     # For delta view, always show only the selected date's values
-    #     if view_mode == 'Delta' and selected_dates:
-    #         show_contribution_metrics(filtered_df, metric_cols, selected_dates)
-    #     # If showing all dates, use only the latest date for metrics
-    #     elif not selected_dates or set(selected_dates) == set(metric_cols):
-    #         latest_col = metric_cols[-1]  # Last column is the latest
-    #         show_contribution_metrics(filtered_df, [latest_col], [latest_col])
-    #     elif selected_dates:
-    #         show_contribution_metrics(filtered_df, metric_cols, selected_dates)
-
-    # If Sewers dataset and a single name is selected, show highest across all time
-    if selected_names and len(selected_names) == 1:
-        selected_name = selected_names[0]
-        try:
-            # filtered_df should be already filtered to the selected name
-            if len(filtered_df) > 0:
-                # compute max across all total columns and find which date it occurred
-                max_per_row = filtered_df[date_total_columns].max(axis=1)
-                highest = max_per_row.max()
-                if pd.notna(highest):
-                    # Find which date column has the highest value
-                    highest_col = filtered_df[date_total_columns].idxmax(axis=1).iloc[0]
-                    date_label = highest_col.replace('_total', '')
-                    st.metric('Highest (all time)', f"{int(highest):,}", delta=f"on {date_label}")
-        except Exception:
-            # don't break the app if something unexpected happens
-            pass
-
-    if selected_dates:
-        # Show only the selected date columns and their deltas if available
-        if view_mode == 'Total':
-            # Always show the latest date on top in the stacked bar chart
-            sorted_selected_dates = sorted(selected_dates, key=lambda x: date_total_columns.index(x) if x in date_total_columns else -1, reverse=True)
-            cols_to_show = ['IGN'] + sorted_selected_dates
-            chart_data = filtered_df.set_index('IGN')[sorted_selected_dates]
-        else:
-            delta_cols = [d.replace('_total', '_delta') for d in selected_dates]
-            # Sort delta columns to match the order of selected_dates (latest first)
-            sorted_delta_cols = [c for _, c in sorted(zip(selected_dates, delta_cols), key=lambda pair: date_total_columns.index(pair[0]) if pair[0] in date_total_columns else -1, reverse=True)]
-            cols_to_show = ['IGN'] + [c for c in sorted_delta_cols if c in filtered_df.columns]
-            chart_data = filtered_df.set_index('IGN')[cols_to_show[1:]] if len(cols_to_show) > 1 else None
-        st.write(f"## Score on {', '.join([d.replace('_total','').replace('_delta','') for d in selected_dates])}")
-        if chart_data is not None and not chart_data.empty:
-            st.line_chart(chart_data, use_container_width=True)
-        # Sort by first date in cols_to_show descending for Sewers (exclude nulls)
-        display_df = filtered_df[cols_to_show].copy()
-        if len(cols_to_show) > 1:
-            sort_col = cols_to_show[1]  # First date column after IGN
-            if sort_col in display_df.columns:
-                display_df = display_df[display_df[sort_col].notna()]
-                display_df = display_df.sort_values(by=sort_col, ascending=False)
-        st.dataframe(display_df, use_container_width=True, height=600)
-    else:
-        # Show all dates (line chart)
-        st.write(f"## {'Total' if view_mode == 'Total' else 'Weekly'} GAINS Over Time")
-        chart_data = filtered_df.set_index('IGN')[chart_cols].T
-        st.line_chart(chart_data, use_container_width=True)
-        # Sort by latest date descending for Sewers (exclude nulls)
-        display_df = filtered_df[['IGN'] + chart_cols].copy()
-        latest_col = chart_cols[-1]
-        display_df = display_df[display_df[latest_col].notna()]
-        display_df = display_df.sort_values(by=latest_col, ascending=False)
-        st.dataframe(display_df, use_container_width=True, height=600)
+        st.title('GAINS over the weeks')
+        
+    st.line_chart(chart_data)
+    st.title('Tabular Data')
+    
+    st.dataframe(display_df)
