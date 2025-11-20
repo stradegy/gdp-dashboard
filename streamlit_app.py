@@ -1,10 +1,5 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import math
-import toml
-from pathlib import Path
-from streamlit_js_eval import streamlit_js_eval
 
 # Set the title and favicon that appear in the Browser's tab bar.
 st.set_page_config(
